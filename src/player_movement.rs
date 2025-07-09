@@ -1,6 +1,6 @@
 use avian3d::{math::*, prelude::*};
-use bevy::{ecs::query::Has, prelude::*};
 use bevy::input::mouse::AccumulatedMouseMotion;
+use bevy::{ecs::query::Has, prelude::*};
 
 /// A marker component indicating that an entity is using a character controller.
 #[derive(Component)]
@@ -55,7 +55,7 @@ impl MovementBundle {
 
 impl Default for MovementBundle {
     fn default() -> Self {
-        Self::new(30.0, 0.9, 7.0, PI * 0.45)
+        Self::new(100.0, 0.0, 7.0, PI * 0.45)
     }
 }
 
@@ -88,7 +88,7 @@ impl CharacterControllerBundle {
                 Quaternion::default(),
                 Dir3::NEG_Y,
             )
-                .with_max_distance(0.2),
+            .with_max_distance(0.2),
             locked_axes: LockedAxes::ROTATION_LOCKED,
             movement: MovementBundle::default(),
             camera: Camera3d::default(),
@@ -136,7 +136,7 @@ impl Plugin for CharacterControllerPlugin {
 fn keyboard_input(
     mut movement_event_writer: EventWriter<MovementAction>,
     keyboard_input: Res<ButtonInput<KeyCode>>,
-    mut query: Query<&Transform, With<CharacterController>>
+    mut query: Query<&Transform, With<CharacterController>>,
 ) {
     let Ok(transform) = query.get_single_mut() else {
         return;
@@ -230,12 +230,15 @@ fn update_grounded(
 fn movement(
     time: Res<Time>,
     mut movement_event_reader: EventReader<MovementAction>,
-    mut controllers: Query<(
-        &MovementAcceleration,
-        &JumpImpulse,
-        &mut LinearVelocity,
-        Has<Grounded>,
-    ), With<CharacterController>>,
+    mut controllers: Query<
+        (
+            &MovementAcceleration,
+            &JumpImpulse,
+            &mut LinearVelocity,
+            Has<Grounded>,
+        ),
+        With<CharacterController>,
+    >,
 ) {
     // Precision is adjusted so that the example works with
     // both the `f32` and `f64` features. Otherwise, you don't need this.

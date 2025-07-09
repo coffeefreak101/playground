@@ -1,10 +1,10 @@
 mod player_movement;
 
+use crate::player_movement::{CharacterControllerBundle, CharacterControllerPlugin};
 use avian3d::math::Scalar;
 use avian3d::prelude::*;
 use bevy::prelude::*;
 use bevy::window::CursorGrabMode;
-use crate::player_movement::{CharacterControllerBundle, CharacterControllerPlugin};
 
 fn setup(
     mut commands: Commands,
@@ -59,11 +59,14 @@ fn setup(
     ));
 }
 
-
 fn main() {
     App::new()
         // Enable physics
-        .add_plugins((DefaultPlugins, PhysicsPlugins::default(), CharacterControllerPlugin))
+        .add_plugins((
+            DefaultPlugins,
+            PhysicsPlugins::default(),
+            CharacterControllerPlugin,
+        ))
         .add_systems(Startup, setup)
         .run();
 }
