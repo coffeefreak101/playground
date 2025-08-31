@@ -1,10 +1,21 @@
 use avian3d::{math::*, prelude::*};
 use bevy::input::mouse::AccumulatedMouseMotion;
 use bevy::{ecs::query::Has, prelude::*};
+use bevy_enhanced_input::prelude::*;
+
+const PITCH_LIMIT: f32 = FRAC_PI_2 - 0.01;
 
 /// A marker component indicating that an entity is using a character controller.
 #[derive(Component)]
-pub struct CharacterController;
+pub struct Player;
+
+#[derive(InputAction)]
+#[action_output(bool)]
+pub struct Jump;
+
+#[derive(InputAction)]
+#[action_output(Vec2)]
+pub struct Move;
 
 /// A marker component indicating that an entity is on the ground.
 #[derive(Component)]
@@ -62,8 +73,8 @@ impl Default for MovementBundle {
 /// A bundle that contains the components needed for a basic
 /// dynamic character controller.
 #[derive(Bundle)]
-pub struct CharacterControllerBundle {
-    character_controller: CharacterController,
+pub struct PlayerBundle {
+    player: Player,
     rigid_body: RigidBody,
     collider: Collider,
     ground_caster: ShapeCaster,
@@ -72,14 +83,14 @@ pub struct CharacterControllerBundle {
     camera: Camera3d,
 }
 
-impl CharacterControllerBundle {
+impl PlayerBundle {
     pub fn new(collider: Collider) -> Self {
         // Create shape caster as a slightly smaller version of collider
         let mut caster_shape = collider.clone();
         caster_shape.set_scale(Vector::ONE * 0.99, 10);
 
         Self {
-            character_controller: CharacterController,
+            player: Player,
             rigid_body: RigidBody::Dynamic,
             collider,
             ground_caster: ShapeCaster::new(
@@ -107,105 +118,25 @@ impl CharacterControllerBundle {
     }
 }
 
-/// An event sent for a movement input action.
-#[derive(Event)]
-pub enum MovementAction {
-    Move(Vector2),
-    Jump,
-}
+pub struct PlayerPlugin;
 
-pub struct CharacterControllerPlugin;
-
-impl Plugin for CharacterControllerPlugin {
+impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
-        app.add_event::<MovementAction>().add_systems(
+        app.add_input_context::<Player>();
+
+        app.add_systems(
             Update,
-            (
-                keyboard_input,
-                update_grounded,
-                movement,
-                rotate_camera,
-                apply_movement_damping,
-            )
-                .chain(),
-        );
+            (update_grounded, rotate_camera, apply_movement_damping).chain(),
+        )
+        .add_observer(handle_player_jump)
+        .add_observer(handle_player_move);
     }
 }
-
-/// Sends [`MovementAction`] events based on keyboard input.
-fn keyboard_input(
-    mut movement_event_writer: EventWriter<MovementAction>,
-    keyboard_input: Res<ButtonInput<KeyCode>>,
-    mut query: Query<&Transform, With<CharacterController>>,
-) {
-    let Ok(transform) = query.get_single_mut() else {
-        return;
-    };
-
-    let forward = keyboard_input.any_pressed([KeyCode::KeyW, KeyCode::ArrowUp]);
-    let backward = keyboard_input.any_pressed([KeyCode::KeyS, KeyCode::ArrowDown]);
-    let left = keyboard_input.any_pressed([KeyCode::KeyA, KeyCode::ArrowLeft]);
-    let right = keyboard_input.any_pressed([KeyCode::KeyD, KeyCode::ArrowRight]);
-
-    let mut direction = Vector2::ZERO;
-
-    if right {
-        let right = transform.right();
-        direction.x += right.x;
-        direction.y += right.z;
-    } else if left {
-        let left = transform.left();
-        direction.x += left.x;
-        direction.y += left.z;
-    }
-
-    if forward {
-        let forward = transform.forward();
-        direction.x += forward.x;
-        direction.y += forward.z;
-    } else if backward {
-        let backward = transform.back();
-        direction.x += backward.x;
-        direction.y += backward.z;
-    }
-
-    if direction != Vector2::ZERO {
-        movement_event_writer.send(MovementAction::Move(direction));
-    }
-
-    if keyboard_input.just_pressed(KeyCode::Space) {
-        movement_event_writer.send(MovementAction::Jump);
-    }
-}
-
-// /// Sends [`MovementAction`] events based on gamepad input.
-// fn gamepad_input(
-//     mut movement_event_writer: EventWriter<MovementAction>,
-//     gamepads: Query<&Gamepad>,
-// ) {
-//     for gamepad in gamepads.iter() {
-//         if let (Some(x), Some(y)) = (
-//             gamepad.get(GamepadAxis::LeftStickX),
-//             gamepad.get(GamepadAxis::LeftStickY),
-//         ) {
-//             movement_event_writer.send(MovementAction::Move(
-//                 Vector2::new(x as Scalar, y as Scalar).clamp_length_max(1.0),
-//             ));
-//         }
-//
-//         if gamepad.just_pressed(GamepadButton::South) {
-//             movement_event_writer.send(MovementAction::Jump);
-//         }
-//     }
-// }
 
 /// Updates the [`Grounded`] status for character controllers.
 fn update_grounded(
     mut commands: Commands,
-    mut query: Query<
-        (Entity, &ShapeHits, &Rotation, Option<&MaxSlopeAngle>),
-        With<CharacterController>,
-    >,
+    mut query: Query<(Entity, &ShapeHits, &Rotation, Option<&MaxSlopeAngle>), With<Player>>,
 ) {
     for (entity, hits, rotation, max_slope_angle) in &mut query {
         // The character is grounded if the shape caster has a hit with a normal
@@ -226,39 +157,43 @@ fn update_grounded(
     }
 }
 
-/// Responds to [`MovementAction`] events and moves character controllers accordingly.
-fn movement(
+fn handle_player_move(
+    trigger: Trigger<Fired<Move>>,
     time: Res<Time>,
-    mut movement_event_reader: EventReader<MovementAction>,
-    mut controllers: Query<
-        (
-            &MovementAcceleration,
-            &JumpImpulse,
-            &mut LinearVelocity,
-            Has<Grounded>,
-        ),
-        With<CharacterController>,
-    >,
+    mut query: Query<(&MovementAcceleration, &mut LinearVelocity, &Transform), With<Player>>,
 ) {
-    // Precision is adjusted so that the example works with
-    // both the `f32` and `f64` features. Otherwise, you don't need this.
-    let delta_time = time.delta_secs_f64().adjust_precision();
+    let movement = trigger.value;
 
-    for event in movement_event_reader.read() {
-        for (movement_acceleration, jump_impulse, mut linear_velocity, is_grounded) in
-            &mut controllers
-        {
-            match event {
-                MovementAction::Move(direction) => {
-                    linear_velocity.x += direction.x * movement_acceleration.0 * delta_time;
-                    linear_velocity.z += direction.y * movement_acceleration.0 * delta_time;
-                }
-                MovementAction::Jump => {
-                    if is_grounded {
-                        linear_velocity.y = jump_impulse.0;
-                    }
-                }
-            }
+    let Ok(data) = query.single_mut() else {
+        return;
+    };
+    let (acceleration, mut velocity, transform) = data;
+
+    let time_delta = time.delta_secs_f64().adjust_precision();
+
+    let mut forward = transform.forward().as_vec3();
+    let mut right = transform.right().as_vec3();
+    forward.y = 0.0;
+    right.y = 0.0;
+    forward = forward.normalize();
+    right = right.normalize();
+
+    let relative_forward = movement.y * forward;
+    let relative_right = movement.x * right;
+
+    let relative_movement = relative_forward + relative_right;
+
+    velocity.x += relative_movement.x * acceleration.0 * time_delta;
+    velocity.z += relative_movement.z * acceleration.0 * time_delta;
+}
+
+fn handle_player_jump(
+    _trigger: Trigger<Fired<Jump>>,
+    mut query: Query<(&JumpImpulse, &mut LinearVelocity, Has<Grounded>), With<Player>>,
+) {
+    for (jump_impulse, mut linear_velocity, is_grounded) in &mut query {
+        if is_grounded {
+            linear_velocity.y = jump_impulse.0;
         }
     }
 }
@@ -274,9 +209,9 @@ fn apply_movement_damping(mut query: Query<(&MovementDampingFactor, &mut LinearV
 
 pub fn rotate_camera(
     accumulated_mouse_motion: Res<AccumulatedMouseMotion>,
-    mut query: Query<&mut Transform, With<CharacterController>>,
+    mut query: Query<&mut Transform, With<Player>>,
 ) {
-    let Ok(mut transform) = query.get_single_mut() else {
+    let Ok(mut transform) = query.single_mut() else {
         return;
     };
 
@@ -289,8 +224,6 @@ pub fn rotate_camera(
 
         let (yaw, pitch, roll) = transform.rotation.to_euler(EulerRot::YXZ);
         let yaw = yaw + delta_yaw;
-
-        const PITCH_LIMIT: f32 = FRAC_PI_2 - 0.01;
         let pitch = (pitch + delta_pitch).clamp(-PITCH_LIMIT, PITCH_LIMIT);
 
         transform.rotation = Quat::from_euler(EulerRot::YXZ, yaw, pitch, roll);

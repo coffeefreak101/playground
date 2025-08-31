@@ -1,10 +1,11 @@
 mod player_movement;
 
-use crate::player_movement::{CharacterControllerBundle, CharacterControllerPlugin};
+use crate::player_movement::{Jump, Move, Player, PlayerBundle, PlayerPlugin};
 use avian3d::math::Scalar;
 use avian3d::prelude::*;
 use bevy::prelude::*;
 use bevy::window::CursorGrabMode;
+use bevy_enhanced_input::prelude::*;
 
 fn setup(
     mut commands: Commands,
@@ -47,7 +48,7 @@ fn setup(
         Mesh3d(meshes.add(Capsule3d::new(0.4, 1.0))),
         MeshMaterial3d(materials.add(Color::srgb(0.8, 0.7, 0.6))),
         Transform::from_xyz(0.0, 1.5, 0.0),
-        CharacterControllerBundle::new(Collider::capsule(0.4, 1.0)).with_movement(
+        PlayerBundle::new(Collider::capsule(0.4, 1.0)).with_movement(
             30.0,
             0.92,
             7.0,
@@ -56,6 +57,19 @@ fn setup(
         Friction::ZERO.with_combine_rule(CoefficientCombine::Min),
         Restitution::ZERO.with_combine_rule(CoefficientCombine::Min),
         GravityScale(2.0),
+        actions!(Player[
+            (
+                Action::<Jump>::new(),
+                bindings![KeyCode::Space]),
+            (
+                Action::<Move>::new(),
+                DeadZone::default(),
+                Bindings::spawn((
+                    Cardinal::wasd_keys(),
+                    Axial::left_stick(),
+                ))
+            )
+        ]),
     ));
 }
 
@@ -64,8 +78,9 @@ fn main() {
         // Enable physics
         .add_plugins((
             DefaultPlugins,
+            EnhancedInputPlugin,
             PhysicsPlugins::default(),
-            CharacterControllerPlugin,
+            PlayerPlugin,
         ))
         .add_systems(Startup, setup)
         .run();
