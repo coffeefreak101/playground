@@ -1,3 +1,5 @@
+use crate::ball::BallBundle;
+use crate::cube::CubeBundle;
 use avian3d::{math::*, prelude::*};
 use bevy::input::mouse::AccumulatedMouseMotion;
 use bevy::{ecs::query::Has, prelude::*};
@@ -11,16 +13,25 @@ pub struct Player;
 
 #[derive(InputAction)]
 #[action_output(bool)]
-pub struct Jump;
+pub struct PlayerJump;
 
 #[derive(InputAction)]
 #[action_output(Vec2)]
-pub struct Move;
+pub struct PlayerMove;
+
+#[derive(InputAction)]
+#[action_output(bool)]
+pub struct PlayerAction;
+
+#[derive(InputAction)]
+#[action_output(bool)]
+pub struct PlayerAltAction;
 
 /// A marker component indicating that an entity is on the ground.
 #[derive(Component)]
 #[component(storage = "SparseSet")]
 pub struct Grounded;
+
 /// The acceleration used for character movement.
 #[derive(Component)]
 pub struct MovementAcceleration(Scalar);
@@ -129,7 +140,9 @@ impl Plugin for PlayerPlugin {
             (update_grounded, rotate_camera, apply_movement_damping).chain(),
         )
         .add_observer(handle_player_jump)
-        .add_observer(handle_player_move);
+        .add_observer(handle_player_move)
+        .add_observer(handle_player_action)
+        .add_observer(handle_player_alt_action);
     }
 }
 
@@ -158,7 +171,7 @@ fn update_grounded(
 }
 
 fn handle_player_move(
-    trigger: Trigger<Fired<Move>>,
+    trigger: Trigger<Fired<PlayerMove>>,
     time: Res<Time>,
     mut query: Query<(&MovementAcceleration, &mut LinearVelocity, &Transform), With<Player>>,
 ) {
@@ -188,7 +201,7 @@ fn handle_player_move(
 }
 
 fn handle_player_jump(
-    _trigger: Trigger<Fired<Jump>>,
+    _trigger: Trigger<Fired<PlayerJump>>,
     mut query: Query<(&JumpImpulse, &mut LinearVelocity, Has<Grounded>), With<Player>>,
 ) {
     for (jump_impulse, mut linear_velocity, is_grounded) in &mut query {
@@ -228,4 +241,42 @@ pub fn rotate_camera(
 
         transform.rotation = Quat::from_euler(EulerRot::YXZ, yaw, pitch, roll);
     }
+}
+
+pub fn handle_player_action(
+    _trigger: Trigger<Started<PlayerAction>>,
+    query: Query<&Transform, With<Player>>,
+    mut commands: Commands,
+    meshes: ResMut<Assets<Mesh>>,
+    materials: ResMut<Assets<StandardMaterial>>,
+) {
+    let Ok(transform) = query.single() else {
+        return;
+    };
+
+    let forward = transform.forward().as_vec3();
+    let mut transform = *transform;
+    transform.translation += forward;
+    let ball = BallBundle::new(meshes, materials, transform);
+
+    commands.spawn(ball);
+}
+
+pub fn handle_player_alt_action(
+    _trigger: Trigger<Started<PlayerAltAction>>,
+    query: Query<&Transform, With<Player>>,
+    mut commands: Commands,
+    meshes: ResMut<Assets<Mesh>>,
+    materials: ResMut<Assets<StandardMaterial>>,
+) {
+    let Ok(transform) = query.single() else {
+        return;
+    };
+
+    let forward = transform.forward().as_vec3();
+    let mut transform = *transform;
+    transform.translation += forward;
+    let cube = CubeBundle::new(meshes, materials, transform);
+
+    commands.spawn(cube);
 }
