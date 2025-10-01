@@ -21,12 +21,16 @@ impl CubeBundle {
         mut materials: ResMut<Assets<StandardMaterial>>,
         transform: Transform,
     ) -> Self {
+        let r = rand::random_range(0..=255);
+        let g = rand::random_range(0..=255);
+        let b = rand::random_range(0..=255);
+
         Self {
             cube: Cube,
             rigid_body: RigidBody::Dynamic,
             collider: Collider::cuboid(1.0, 1.0, 1.0),
             mesh3d: Mesh3d(meshes.add(Cuboid::from_length(1.0))),
-            mesh_material3d: MeshMaterial3d(materials.add(Color::srgb_u8(124, 144, 255))),
+            mesh_material3d: MeshMaterial3d(materials.add(Color::srgb_u8(r, g, b))),
             transform,
             mass: Mass(0.1),
         }
