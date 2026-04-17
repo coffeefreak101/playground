@@ -1,5 +1,6 @@
 use crate::ball::BallBundle;
 use crate::cube::CubeBundle;
+use crate::object_spawner::{handle_cube_spawn, handle_toggle_ghost_object};
 use avian3d::{math::*, prelude::*};
 use bevy::input::mouse::AccumulatedMouseMotion;
 use bevy::prelude::*;
@@ -130,7 +131,10 @@ impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
         app.add_input_context::<Player>();
 
-        app.add_systems(Update, (rotate_camera).chain())
+        app.add_systems(Update, rotate_camera)
+            .add_observer(handle_toggle_ghost_object)
+            // .add_observer(handle_move_ghost_object)
+            .add_observer(handle_cube_spawn)
             .add_observer(handle_player_jump)
             .add_observer(handle_player_move)
             .add_observer(handle_player_sprint)
@@ -141,7 +145,7 @@ impl Plugin for PlayerPlugin {
 }
 
 fn handle_player_move(
-    trigger: Trigger<Fired<PlayerMove>>,
+    on: On<Fire<PlayerMove>>,
     mut query: Query<
         (
             &MovementAcceleration,
@@ -152,7 +156,7 @@ fn handle_player_move(
         With<Player>,
     >,
 ) {
-    let movement = trigger.value;
+    let movement = on.value;
 
     let Ok(data) = query.single_mut() else {
         return;
@@ -166,13 +170,13 @@ fn handle_player_move(
     forward = forward.normalize();
     right = right.normalize();
 
-    let relative_forward = movement.y * forward;
-    let relative_right = movement.x * right;
+    let relative_forward = movement.y * forward.y;
+    let relative_right = movement.x * right.x;
 
-    let mut velocity = relative_forward + relative_right;
+    let mut velocity = Vec3::new(relative_right, relative_forward, 0.0);
 
     let acceleration = if is_sprinting.0 {
-        acceleration.0 * 2.0
+        acceleration.0 * 3.0
     } else {
         acceleration.0
     };
@@ -181,14 +185,14 @@ fn handle_player_move(
     velocity.z *= acceleration;
 
     controller.basis(TnuaBuiltinWalk {
-        desired_velocity: velocity,
-        float_height: 1.0,
+        desired_motion: velocity.normalize_or_zero(),
+        // desired_forward: 1.0,
         ..default()
     });
 }
 
 fn handle_player_stop(
-    _trigger: Trigger<Completed<PlayerMove>>,
+    _on: On<Complete<PlayerMove>>,
     mut query: Query<(&mut TnuaController, &mut IsSprinting), With<Player>>,
 ) {
     let Ok((mut controller, mut is_sprinting)) = query.single_mut() else {
@@ -205,7 +209,7 @@ fn handle_player_stop(
 }
 
 fn handle_player_jump(
-    _trigger: Trigger<Started<PlayerJump>>,
+    _on: On<Start<PlayerJump>>,
     mut query: Query<(&JumpImpulse, &mut TnuaController), With<Player>>,
 ) {
     for (jump_impulse, mut controller) in &mut query {
@@ -217,7 +221,7 @@ fn handle_player_jump(
 }
 
 fn handle_player_sprint(
-    _trigger: Trigger<Started<PlayerSprint>>,
+    _on: On<Start<PlayerSprint>>,
     mut query: Query<&mut IsSprinting, With<Player>>,
 ) {
     let Ok(mut is_sprinting) = query.single_mut() else {
@@ -251,7 +255,7 @@ pub fn rotate_camera(
 }
 
 pub fn handle_player_action(
-    _trigger: Trigger<Fired<PlayerAction>>,
+    _on: On<Fire<PlayerAction>>,
     query: Query<&Transform, With<Player>>,
     mut commands: Commands,
     meshes: ResMut<Assets<Mesh>>,
@@ -271,7 +275,7 @@ pub fn handle_player_action(
 }
 
 pub fn handle_player_alt_action(
-    _trigger: Trigger<Started<PlayerAltAction>>,
+    _on: On<Start<PlayerAltAction>>,
     query: Query<&Transform, With<Player>>,
     mut commands: Commands,
     meshes: ResMut<Assets<Mesh>>,

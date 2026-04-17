@@ -1,16 +1,17 @@
 mod ball;
 mod cube;
+mod object_spawner;
 mod player_movement;
 
 use crate::ball::handle_despawn_after;
+use crate::object_spawner::{ShowGhostAction, SpawnObject};
 use crate::player_movement::{
-    Player, PlayerAction, PlayerAltAction, PlayerBundle, PlayerJump, PlayerMove, PlayerPlugin,
-    PlayerSprint,
+    Player, PlayerAction, PlayerBundle, PlayerJump, PlayerMove, PlayerPlugin, PlayerSprint,
 };
 use avian3d::math::Scalar;
 use avian3d::prelude::*;
 use bevy::prelude::*;
-use bevy::window::{CursorGrabMode, WindowMode};
+use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow, WindowMode};
 use bevy_enhanced_input::prelude::*;
 use bevy_tnua::prelude::*;
 use bevy_tnua_avian3d::TnuaAvian3dPlugin;
@@ -20,9 +21,10 @@ fn setup(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut window: Single<&mut Window>,
+    mut cursor: Single<&mut CursorOptions, With<PrimaryWindow>>,
 ) {
-    window.cursor_options.visible = false;
-    window.cursor_options.grab_mode = CursorGrabMode::Locked;
+    cursor.visible = false;
+    cursor.grab_mode = CursorGrabMode::Locked;
     window.mode = WindowMode::BorderlessFullscreen(MonitorSelection::Primary);
 
     // Static physics object with a collision shape
@@ -86,12 +88,16 @@ fn setup(
                     bindings![MouseButton::Left],
                 ),
                 (
-                    Action::<PlayerAltAction>::new(),
+                    Action::<ShowGhostAction>::new(),
                     bindings![MouseButton::Right],
                 ),
                 (
                     Action::<PlayerSprint>::new(),
                     bindings![KeyCode::ShiftLeft]
+                ),
+                (
+                    Action::<SpawnObject>::new(),
+                    bindings![KeyCode::KeyE]
                 )
             ]),
             TnuaController::default(),
@@ -109,6 +115,7 @@ fn main() {
             TnuaAvian3dPlugin::new(PhysicsSchedule),
             PhysicsPlugins::default(),
             PlayerPlugin,
+            // SpawnerPlugin,
         ))
         .add_systems(Startup, setup)
         .add_systems(FixedUpdate, handle_despawn_after)
