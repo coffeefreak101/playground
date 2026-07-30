@@ -5,10 +5,7 @@ mod player_movement;
 
 use crate::ball::handle_despawn_after;
 use crate::object_spawner::{ShowGhostAction, SpawnObject};
-use crate::player_movement::{
-    Player, PlayerAction, PlayerBundle, PlayerJump, PlayerMove, PlayerPlugin, PlayerSprint,
-};
-use avian3d::math::Scalar;
+use crate::player_movement::*;
 use avian3d::prelude::*;
 use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow, WindowMode};
@@ -22,6 +19,7 @@ fn setup(
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut window: Single<&mut Window>,
     mut cursor: Single<&mut CursorOptions, With<PrimaryWindow>>,
+    control_scheme_configs: ResMut<Assets<PlayerControlSchemeConfig>>,
 ) {
     cursor.visible = false;
     cursor.grab_mode = CursorGrabMode::Locked;
@@ -48,10 +46,7 @@ fn setup(
 
     // Light
     commands.spawn((
-        PointLight {
-            shadows_enabled: true,
-            ..default()
-        },
+        PointLight { ..default() },
         Transform::from_xyz(4.0, 8.0, 4.0),
     ));
 
@@ -61,11 +56,7 @@ fn setup(
             Mesh3d(meshes.add(Capsule3d::new(0.4, 1.0))),
             MeshMaterial3d(materials.add(Color::srgb(0.8, 0.7, 0.6))),
             Transform::from_xyz(0.0, 0.0, 0.0),
-            PlayerBundle::new(Collider::capsule(0.4, 1.0)).with_movement(
-                10.0,
-                15.0,
-                (30.0 as Scalar).to_radians(),
-            ),
+            PlayerBundle::new(Collider::capsule(0.4, 1.0), control_scheme_configs),
             Friction::ZERO.with_combine_rule(CoefficientCombine::Min),
             Restitution::ZERO.with_combine_rule(CoefficientCombine::Min),
             GravityScale(2.0),
@@ -100,9 +91,8 @@ fn setup(
                     bindings![KeyCode::KeyE]
                 )
             ]),
-            TnuaController::default(),
         ))
-        .with_child((Camera3d::default(), Transform::from_xyz(0.0, 0.2, 0.0)));
+        .with_child((Camera3d::default(), Transform::from_xyz(0.0, 1.0, 0.0)));
 }
 
 fn main() {
@@ -111,11 +101,12 @@ fn main() {
         .add_plugins((
             DefaultPlugins,
             EnhancedInputPlugin,
-            TnuaControllerPlugin::new(PhysicsSchedule),
-            TnuaAvian3dPlugin::new(PhysicsSchedule),
-            PhysicsPlugins::default(),
+            TnuaControllerPlugin::<PlayerControlScheme>::new(FixedPostUpdate),
+            TnuaAvian3dPlugin::new(FixedPostUpdate),
+            PhysicsPlugins::default().set(
+                PhysicsInterpolationPlugin::interpolate_all()
+            ),
             PlayerPlugin,
-            // SpawnerPlugin,
         ))
         .add_systems(Startup, setup)
         .add_systems(FixedUpdate, handle_despawn_after)
