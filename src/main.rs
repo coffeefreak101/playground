@@ -10,8 +10,6 @@ use avian3d::prelude::*;
 use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow, WindowMode};
 use bevy_enhanced_input::prelude::*;
-use bevy_tnua::prelude::*;
-use bevy_tnua_avian3d::TnuaAvian3dPlugin;
 
 fn setup(
     mut commands: Commands,
@@ -19,7 +17,6 @@ fn setup(
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut window: Single<&mut Window>,
     mut cursor: Single<&mut CursorOptions, With<PrimaryWindow>>,
-    control_scheme_configs: ResMut<Assets<PlayerControlSchemeConfig>>,
 ) {
     cursor.visible = false;
     cursor.grab_mode = CursorGrabMode::Locked;
@@ -45,10 +42,16 @@ fn setup(
     ));
 
     // Light
-    commands.spawn((
-        PointLight { ..default() },
-        Transform::from_xyz(4.0, 8.0, 4.0),
-    ));
+    // commands.spawn((
+    //     PointLight { ..default() },
+    //     Transform::from_xyz(4.0, 8.0, 4.0),
+    // ));
+
+    let light = AmbientLight {
+        color: Color::WHITE,
+        brightness: 500.0,
+        ..default()
+    };
 
     // Player
     commands
@@ -56,10 +59,10 @@ fn setup(
             Mesh3d(meshes.add(Capsule3d::new(0.4, 1.0))),
             MeshMaterial3d(materials.add(Color::srgb(0.8, 0.7, 0.6))),
             Transform::from_xyz(0.0, 0.0, 0.0),
-            PlayerBundle::new(Collider::capsule(0.4, 1.0), control_scheme_configs),
+            PlayerBundle::new(Collider::capsule(0.4, 1.0)),
             Friction::ZERO.with_combine_rule(CoefficientCombine::Min),
             Restitution::ZERO.with_combine_rule(CoefficientCombine::Min),
-            GravityScale(2.0),
+            GravityScale(1.0),
             actions!(Player[
                 (
                     Action::<PlayerJump>::new(),
@@ -92,17 +95,14 @@ fn setup(
                 )
             ]),
         ))
-        .with_child((Camera3d::default(), Transform::from_xyz(0.0, 1.0, 0.0)));
+        .with_child((Camera3d::default(), Transform::from_xyz(0.0, 1.0, 0.0), light));
 }
 
 fn main() {
     App::new()
-        // Enable physics
         .add_plugins((
             DefaultPlugins,
             EnhancedInputPlugin,
-            TnuaControllerPlugin::<PlayerControlScheme>::new(FixedPostUpdate),
-            TnuaAvian3dPlugin::new(FixedPostUpdate),
             PhysicsPlugins::default().set(
                 PhysicsInterpolationPlugin::interpolate_all()
             ),
